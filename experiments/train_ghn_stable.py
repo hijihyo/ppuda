@@ -25,44 +25,40 @@ ckpt_args = None
 attempts = 0
 
 while attempts < 100:  # let's allow for resuming this job 100 times
-
     attempts += 1
-    print('\nrunning the script time #%d with args:' % attempts, args, ckpt_args, '\n')
+    print("\nrunning the script time #%d with args:" % attempts, args, ckpt_args, "\n")
 
-    result = run(['python'] + args + ([] if ckpt_args is None else ckpt_args),
-                 stderr=PIPE, text=True)
+    result = run(["python"] + args + ([] if ckpt_args is None else ckpt_args), stderr=PIPE, text=True)
 
-    print('script returned:', result)
-    print('\nreturned code:', result.returncode)
-
+    print("script returned:", result)
+    print("\nreturned code:", result.returncode)
 
     if result.returncode != 0:
+        print("Script failed!")
 
-        print('Script failed!')
+        print("\nERROR:", result.stderr)
 
-        print('\nERROR:', result.stderr)
-
-        if result.returncode == 2 and result.stderr.find('[Errno 2] No such file or directory') >= 0:
-            print('\nRun this script as `python experiments/train_ghn_stable.py experiments/train_ghn.py [args]`\n')
+        if result.returncode == 2 and result.stderr.find("[Errno 2] No such file or directory") >= 0:
+            print("\nRun this script as `python experiments/train_ghn_stable.py experiments/train_ghn.py [args]`\n")
             break
 
-        elif result.stderr.find('RuntimeError') < 0:
-            print('\nPlease fix the above printed error and restart the script\n')
+        elif result.stderr.find("RuntimeError") < 0:
+            print("\nPlease fix the above printed error and restart the script\n")
             break
 
-        print('restarting the script')
-        n1 = result.stderr.find('use this ckpt for resuming the script:')
+        print("restarting the script")
+        n1 = result.stderr.find("use this ckpt for resuming the script:")
         if n1 >= 0:
-            n1 = result.stderr[n1:].find(':') + n1
-            n2 = result.stderr[n1:].find('\n') + n1
+            n1 = result.stderr[n1:].find(":") + n1
+            n2 = result.stderr[n1:].find("\n") + n1
             ckpt = result.stderr[n1 + 2 : n2]
-            print('parsed path:', ckpt, 'exists:', os.path.exists(ckpt))
+            print("parsed path:", ckpt, "exists:", os.path.exists(ckpt))
             if os.path.exists(ckpt):
-                ckpt_args = ['--ckpt', ckpt]
+                ckpt_args = ["--ckpt", ckpt]
             else:
-                print('saved checkpoint file is missing, will be starting from scratch')
+                print("saved checkpoint file is missing, will be starting from scratch")
         else:
-            print('no saved checkpoint found')
+            print("no saved checkpoint found")
         continue
     else:
         break

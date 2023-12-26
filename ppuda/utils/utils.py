@@ -1,3 +1,4 @@
+# flake8: noqa: F403, F405
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
@@ -12,14 +13,16 @@ Utils.
 
 import os
 import random
-import numpy as np
 import time
+
+import numpy as np
 import torch
-import torchvision
 import torch.nn as nn
 import torch.utils.data
-from tqdm import tqdm
+import torchvision
 from torchvision.models import *
+from tqdm import tqdm
+
 from ..deepnets1m.genotypes import DARTS
 from .darts_utils import AvgrageMeter, accuracy, load_DARTS_pretrained
 
@@ -39,17 +42,21 @@ def infer(model, val_queue, verbose=False, n_batches=-1):
     with torch.no_grad():
         for b, (images, targets) in enumerate(tqdm(val_queue)):
             out = model(images.to(device, non_blocking=True))
-            prec1, prec5 = accuracy(out[0] if isinstance(out, tuple) else out,
-                                    targets.to(device, non_blocking=True),
-                                    topk=(1, 5))
+            prec1, prec5 = accuracy(
+                out[0] if isinstance(out, tuple) else out, targets.to(device, non_blocking=True), topk=(1, 5)
+            )
             top1.update(prec1.item(), images.shape[0])
             top5.update(prec5.item(), images.shape[0])
             if n_batches > -1 and b >= n_batches - 1:
                 break
 
     if verbose:
-        print('\ntesting: top1={:.2f}, top5={:.2f} ({} eval samples, time={:.2f} seconds)'.format(
-            top1.avg, top5.avg, top1.cnt, time.time() - start), flush=True)
+        print(
+            "\ntesting: top1={:.2f}, top5={:.2f} ({} eval samples, time={:.2f} seconds)".format(
+                top1.avg, top5.avg, top1.cnt, time.time() - start
+            ),
+            flush=True,
+        )
 
     return top1.avg, top5.avg
 
@@ -65,28 +72,29 @@ def pretrained_model(model, ckpt, num_classes, debug, ghn_class):
     :return: the model with pretrained/predicted parameters
     """
     if ckpt is not None:
-        device = 'cpu'  # use CPU to load the model
-        assert os.path.exists(ckpt), 'ckpt is specified ({}), but does not exist'.format(ckpt)
+        device = "cpu"  # use CPU to load the model
+        assert os.path.exists(ckpt), "ckpt is specified ({}), but does not exist".format(ckpt)
         state_dict = torch.load(ckpt, map_location=device)
-        if 'config' in state_dict:
-            ghn = ghn_class(**state_dict['config'], debug_level=debug).to(device).eval()
-            ghn.load_state_dict(state_dict['state_dict'])
+        if "config" in state_dict:
+            ghn = ghn_class(**state_dict["config"], debug_level=debug).to(device).eval()
+            ghn.load_state_dict(state_dict["state_dict"])
             # Predict all the parameters except for the last classification layers (in case the image dataset changes)
             ghn(model, predict_class_layers=ghn.num_classes == num_classes, bn_train=False)
         else:
             # Load a trained model
-            if hasattr(model, 'genotype') and model.genotype == DARTS:
-                model, res = load_DARTS_pretrained(model, checkpoint=ckpt, device=device,
-                                                   load_class_layers=num_classes == 1000)
+            if hasattr(model, "genotype") and model.genotype == DARTS:
+                model, res = load_DARTS_pretrained(
+                    model, checkpoint=ckpt, device=device, load_class_layers=num_classes == 1000
+                )
             else:
-                state_dict = torch.load(ckpt, map_location=device)['state_dict']
+                state_dict = torch.load(ckpt, map_location=device)["state_dict"]
                 params = dict(model.named_parameters())
                 names = list(state_dict.keys())
                 for name in names:
-                    if name.startswith('classifier') and state_dict[name].shape != params[name].shape:
+                    if name.startswith("classifier") and state_dict[name].shape != params[name].shape:
                         del state_dict[name]
                 res = model.load_state_dict(state_dict, strict=False)
-            print('loaded pretrained model from {} (result = {})'.format(ckpt, res))
+            print("loaded pretrained model from {} (result = {})".format(ckpt, res))
 
     else:
         if isinstance(model, torchvision.models.ResNet):
@@ -98,9 +106,9 @@ def pretrained_model(model, ckpt, num_classes, debug, ghn_class):
                 fc[-1] = nn.Linear(fc[-1].in_features, num_classes)
                 model.classifier = torch.nn.Sequential(*fc)
         else:
-            raise NotImplementedError('model classification layer must be adjusted', type(model))
+            raise NotImplementedError("model classification layer must be adjusted", type(model))
 
-        print('loaded pretrained {} torchvision model'.format(model.__class__.__name__))
+        print("loaded pretrained {} torchvision model".format(model.__class__.__name__))
 
     return model
 
@@ -124,20 +132,20 @@ def adjust_net(net, large_input=False):
             # use the center of the filters
             offset = ((ks_org[0] - ks[0]) // 2, (ks_org[1] - ks[1]) // 2)
             offset1 = ((ks_org[0] - ks[0]) % 2, (ks_org[1] - ks[1]) % 2)
-            conv1.weight.data = conv1.weight.data[:, :, offset[0]:-offset[0]-offset1[0], offset[1]:-offset[1]-offset1[1]]
+            conv1.weight.data = conv1.weight.data[
+                :, :, offset[0] : -offset[0] - offset1[0], offset[1] : -offset[1] - offset1[1]
+            ]
             assert conv1.weight.data.shape[2:] == ks, (conv1.weight.data.shape, ks)
         conv1.kernel_size = ks
         conv1.padding = (ks[0] // 2, ks[1] // 2)
         conv1.stride = (stride, stride)
 
     if isinstance(net, ResNet):
-
         adjust_first_conv(net.conv1)
-        assert hasattr(net, 'maxpool'), type(net)
+        assert hasattr(net, "maxpool"), type(net)
         net.maxpool = nn.Identity()
 
     elif isinstance(net, DenseNet):
-
         adjust_first_conv(net.features[0])
         assert isinstance(net.features[3], nn.MaxPool2d), (net.features[3], type(net))
         net.features[3] = nn.Identity()
@@ -152,27 +160,22 @@ def adjust_net(net, large_input=False):
             m.apply(reduce_stride)
 
     elif isinstance(net, VGG):
-
         for layer, mod in enumerate(net.features[:10]):
             if isinstance(mod, nn.MaxPool2d):
                 net.features[layer] = nn.Identity()
 
     elif isinstance(net, AlexNet):
-
         net.features[0].stride = 1
         net.features[2] = nn.Identity()
 
     elif isinstance(net, MNASNet):
-
         net.layers[0].stride = 1
 
     elif isinstance(net, ShuffleNetV2):
-
         net.conv1.stride = 1
         net.maxpool = nn.Identity()
 
     elif isinstance(net, GoogLeNet):
-
         net.conv1.stride = 1
         net.maxpool1 = nn.Identity()
 
@@ -181,8 +184,10 @@ def adjust_net(net, large_input=False):
         module.stride = 1
 
     else:
-        print('WARNING: the network (%s) is not adapted for small inputs which may result in lower performance' % str(
-            type(net)))
+        print(
+            "WARNING: the network (%s) is not adapted for small inputs which may result in lower performance"
+            % str(type(net))
+        )
 
     return net
 
@@ -211,4 +216,4 @@ def rand_choice(x, n=None):
 
 
 def default_device():
-    return 'cuda' if torch.cuda.is_available() else 'cpu'
+    return "cuda" if torch.cuda.is_available() else "cpu"

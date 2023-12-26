@@ -10,25 +10,26 @@ Helper layers to build GHNs.
 """
 
 
+import copy
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import copy
 
 
 def get_activation(activation):
     if activation is not None:
-        if activation == 'relu':
+        if activation == "relu":
             f = nn.ReLU(inplace=True)
-        elif activation == 'lrelu':
+        elif activation == "lrelu":
             f = nn.LeakyReLU()
-        elif activation == 'selu':
+        elif activation == "selu":
             f = nn.SELU()
-        elif activation == 'elu':
+        elif activation == "elu":
             f = nn.ELU()
-        elif activation == 'rrelu':
+        elif activation == "rrelu":
             f = nn.RReLU()
-        elif activation == 'sigmoid':
+        elif activation == "sigmoid":
             f = nn.Sigmoid()
         else:
             raise NotImplementedError(activation)
@@ -46,10 +47,12 @@ class ShapeEncoder(nn.Module):
         self.debug_level = debug_level
         self.num_classes = num_classes
         self.ch_steps = (2**3, 2**6, 2**12, 2**13)
-        self.channels = np.unique([1, 3, num_classes] +
-                                  list(range(self.ch_steps[0], self.ch_steps[1], 2**3)) +
-                                  list(range(self.ch_steps[1], self.ch_steps[2], 2**4)) +
-                                  list(range(self.ch_steps[2], self.ch_steps[3] + 1, 2**5)))
+        self.channels = np.unique(
+            [1, 3, num_classes]
+            + list(range(self.ch_steps[0], self.ch_steps[1], 2**3))
+            + list(range(self.ch_steps[1], self.ch_steps[2], 2**4))
+            + list(range(self.ch_steps[2], self.ch_steps[3] + 1, 2**5))
+        )
 
         self.spatial = np.unique(list(range(1, max(12, max_shape[3]), 2)) + [14, 16])
 
@@ -58,7 +61,9 @@ class ShapeEncoder(nn.Module):
         self.channels_lookup = {c: i for i, c in enumerate(self.channels)}
         self.channels_lookup_training = copy.deepcopy(self.channels_lookup)
         for c in range(4, self.ch_steps[0]):
-            self.channels_lookup[c] = self.channels_lookup[self.ch_steps[0]]  # 4-7 channels will be treated as 8 channels
+            self.channels_lookup[c] = self.channels_lookup[
+                self.ch_steps[0]
+            ]  # 4-7 channels will be treated as 8 channels
         for c in range(1, self.channels[-1]):
             if c not in self.channels_lookup:
                 self.channels_lookup[c] = self.channels_lookup[self.channels[np.argmin(abs(self.channels - c))]]
@@ -74,8 +79,9 @@ class ShapeEncoder(nn.Module):
         self.embed_spatial = torch.nn.Embedding(n_s + 1, hid // 4)
         self.embed_channel = torch.nn.Embedding(n_ch + 1, hid // 4)
 
-        self.register_buffer('dummy_ind', torch.tensor([n_ch, n_ch, n_s, n_s], dtype=torch.long).view(1, 4),
-                             persistent=False)
+        self.register_buffer(
+            "dummy_ind", torch.tensor([n_ch, n_ch, n_s, n_s], dtype=torch.long).view(1, 4), persistent=False
+        )
 
     def tensor_shape_to_4d(self, sz):
         if len(sz) == 1:
@@ -96,7 +102,7 @@ class ShapeEncoder(nn.Module):
 
         self.printed_warning = False
         for node_ind in params_map:
-            sz = params_map[node_ind][0]['sz']
+            sz = params_map[node_ind][0]["sz"]
             if sz is None:
                 continue
 
@@ -104,7 +110,7 @@ class ShapeEncoder(nn.Module):
             sz = self.tensor_shape_to_4d(sz)
             assert len(sz) == 4, sz
 
-            if not predict_class_layers and params_map[node_ind][1] in ['cls_w', 'cls_b']:
+            if not predict_class_layers and params_map[node_ind][1] in ["cls_w", "cls_b"]:
                 # keep the classification shape as though the GHN is used on the dataset it was trained on
                 sz = (self.num_classes, *sz[1:])
 
@@ -113,26 +119,41 @@ class ShapeEncoder(nn.Module):
                 # if not in the dictionary, then use the maximum shape
                 if i < 2:  # for out/in channel dimensions
                     shape_ind[node_ind, i] = self.channels_lookup[
-                        sz[i] if sz[i] in self.channels_lookup else self.channels[-1]]
+                        sz[i] if sz[i] in self.channels_lookup else self.channels[-1]
+                    ]
                     if self.debug_level and not self.printed_warning:
                         recognized_sz += int(sz[i] in self.channels_lookup_training)
                 else:  # for kernel height/width
                     shape_ind[node_ind, i] = self.spatial_lookup[
-                        sz[i] if sz[i] in self.spatial_lookup else self.spatial[-1]]
+                        sz[i] if sz[i] in self.spatial_lookup else self.spatial[-1]
+                    ]
                     if self.debug_level and not self.printed_warning:
                         recognized_sz += int(sz[i] in self.spatial_lookup_training)
 
             if self.debug_level and not self.printed_warning:  # print a warning once per architecture
                 if recognized_sz != 4:
-                    print('WARNING: unrecognized shape %s, so the closest shape at index %s will be used instead.' % (
-                        sz_org, ([self.channels[c.item()] if i < 2 else self.spatial[c.item()] for i, c in
-                                  enumerate(shape_ind[node_ind])])))
+                    print(
+                        "WARNING: unrecognized shape %s, so the closest shape at index %s will be used instead."
+                        % (
+                            sz_org,
+                            (
+                                [
+                                    self.channels[c.item()] if i < 2 else self.spatial[c.item()]
+                                    for i, c in enumerate(shape_ind[node_ind])
+                                ]
+                            ),
+                        )
+                    )
                     self.printed_warning = True
 
         shape_embed = torch.cat(
-            (self.embed_channel(shape_ind[:, 0]),
-             self.embed_channel(shape_ind[:, 1]),
-             self.embed_spatial(shape_ind[:, 2]),
-             self.embed_spatial(shape_ind[:, 3])), dim=1)
+            (
+                self.embed_channel(shape_ind[:, 0]),
+                self.embed_channel(shape_ind[:, 1]),
+                self.embed_spatial(shape_ind[:, 2]),
+                self.embed_spatial(shape_ind[:, 3]),
+            ),
+            dim=1,
+        )
 
         return x + shape_embed

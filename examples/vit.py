@@ -21,42 +21,38 @@ Example:
 
 
 import sys
-from ppuda.vision.loader import image_loader
-from ppuda.ghn.nn import GHN2
+
 from ppuda.deepnets1m.genotypes import ViT
 from ppuda.deepnets1m.net import Network
+from ppuda.ghn.nn import GHN2
 from ppuda.utils import capacity, infer
-
+from ppuda.vision.loader import image_loader
 
 try:
-    dataset = sys.argv[1].lower()   # imagenet, cifar10
+    dataset = sys.argv[1].lower()  # imagenet, cifar10
     ghn = GHN2(dataset)
-except:
-    print('\nExample of usage: python examples/vit.py imagenet\n')
+except:  # noqa: E722
+    print("\nExample of usage: python examples/vit.py imagenet\n")
     raise
 
-is_imagenet = dataset == 'imagenet'
+is_imagenet = dataset == "imagenet"
 images_val, num_classes = image_loader(dataset, num_workers=8 * is_imagenet)[1:]
 if is_imagenet:
     images_val.sampler.generator.manual_seed(1111)  # set the generator seed to reproduce results
 
 # Define the network configuration
-model = Network(C=128,
-                num_classes=num_classes,
-                genotype=ViT,
-                n_cells=12,
-                preproc=False,
-                C_mult=1,
-                is_imagenet_input=is_imagenet).eval()
+model = Network(
+    C=128, num_classes=num_classes, genotype=ViT, n_cells=12, preproc=False, C_mult=1, is_imagenet_input=is_imagenet
+).eval()
 
 
 model = ghn(model)  # Predict all parameters for ViT
 
-print('\nEvaluation of ViT with {} parameters'.format(capacity(model)[1]))
+print("\nEvaluation of ViT with {} parameters".format(capacity(model)[1]))
 
 top1, top5 = infer(model, images_val, verbose=True)
 # top5=4.41 for ViT on ImageNet and top1=11.41 on CIFAR-10
 if (is_imagenet and abs(top5 - 4.41) > 0.01) or (not is_imagenet and top1 != 11.41):
-    print('WARNING: results appear to be different from expected!' )
+    print("WARNING: results appear to be different from expected!")
 
-print('\ndone')
+print("\ndone")

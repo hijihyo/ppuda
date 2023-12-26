@@ -1,3 +1,4 @@
+# flake8: noqa: F401, F403
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
@@ -5,6 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from .darts_utils import *
+from .init import *
 from .trainer import *
 from .utils import *
-from .init import *

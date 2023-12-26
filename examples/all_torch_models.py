@@ -16,19 +16,20 @@ Example:
 """
 
 
-import torchvision
 import sys
-from ppuda.vision.loader import image_loader
-from ppuda.ghn.nn import GHN2
-from ppuda.utils import capacity, adjust_net, infer
 
+import torchvision
+
+from ppuda.ghn.nn import GHN2
+from ppuda.utils import adjust_net, capacity, infer
+from ppuda.vision.loader import image_loader
 
 try:
     dataset = sys.argv[1].lower()  # imagenet, cifar10
-    is_imagenet = dataset == 'imagenet'
+    is_imagenet = dataset == "imagenet"
     ghn = GHN2(dataset)
-except:
-    print('\nExample of usage: python examples/all_torch_models.py cifar10\n')
+except:  # noqa: E722
+    print("\nExample of usage: python examples/all_torch_models.py cifar10\n")
     raise
 
 
@@ -36,23 +37,34 @@ except:
 # skip inception_v3 in this example, since it expects a larger input, so additional image transforms are required
 images_val = None
 for arch in (
-        torchvision.models.resnet.__all__ + ['alexnet'] + torchvision.models.vgg.__all__ +
-        torchvision.models.squeezenet.__all__ + torchvision.models.densenet.__all__ + ['googlenet'] +
-        torchvision.models.mobilenet.__all__ + torchvision.models.mnasnet.__all__ + torchvision.models.shufflenetv2.__all__):
-
+    torchvision.models.resnet.__all__
+    + ["alexnet"]
+    + torchvision.models.vgg.__all__
+    + torchvision.models.squeezenet.__all__
+    + torchvision.models.densenet.__all__
+    + ["googlenet"]
+    + torchvision.models.mobilenet.__all__
+    + torchvision.models.mnasnet.__all__
+    + torchvision.models.shufflenetv2.__all__
+):
     if arch[0].isupper():
         continue  # classname
 
     if is_imagenet or images_val is None:
-        images_val, num_classes = image_loader(dataset, num_workers=8 * is_imagenet)[1:]  # reload imagenet val to enable reproducibility
+        images_val, num_classes = image_loader(dataset, num_workers=8 * is_imagenet)[
+            1:
+        ]  # reload imagenet val to enable reproducibility
 
-    kw_args = {'aux_logits': False, 'init_weights': False} if arch == 'googlenet' else {}
+    kw_args = {"aux_logits": False, "init_weights": False} if arch == "googlenet" else {}
 
     # Predict all parameters
-    model = ghn(adjust_net(eval('torchvision.models.%s(num_classes=%d, **kw_args)' % (arch, num_classes)),
-                           large_input=is_imagenet))
+    model = ghn(
+        adjust_net(
+            eval("torchvision.models.%s(num_classes=%d, **kw_args)" % (arch, num_classes)), large_input=is_imagenet
+        )
+    )
 
-    print('\nEvaluation of {} with {} parameters'.format(arch.upper(), capacity(model)[1]))
+    print("\nEvaluation of {} with {} parameters".format(arch.upper(), capacity(model)[1]))
     top1, top5 = infer(model, images_val, verbose=True)
 
-print('\ndone')
+print("\ndone")

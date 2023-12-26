@@ -10,34 +10,36 @@ Graph HyperNetworks.
 """
 
 
-import torch
-import torch.nn as nn
-import numpy as np
 import os
-from .mlp import MLP
-from .gatedgnn import GatedGNN
-from .decoder import MLPDecoder, ConvDecoder
-from .layers import ShapeEncoder
-from ..deepnets1m.ops import NormLayers, PosEnc
-from ..deepnets1m.genotypes import PRIMITIVES_DEEPNETS1M
-from ..deepnets1m.net import named_layered_modules
-from ..deepnets1m.graph import Graph, GraphBatch
-from ..utils import capacity, default_device
 import time
 
+import numpy as np
+import torch
+import torch.nn as nn
 
-def GHN1(dataset='imagenet'):
+from ..deepnets1m.genotypes import PRIMITIVES_DEEPNETS1M
+from ..deepnets1m.graph import Graph, GraphBatch
+from ..deepnets1m.net import named_layered_modules
+from ..deepnets1m.ops import NormLayers, PosEnc
+from ..utils import capacity, default_device
+from .decoder import ConvDecoder, MLPDecoder
+from .gatedgnn import GatedGNN
+from .layers import ShapeEncoder
+from .mlp import MLP
+
+
+def GHN1(dataset="imagenet"):
     """
-        Loads GHN-1 trained on ImageNet or CIFAR-10.
-        To load a GHN from an arbitrary checkpoint, use GHN.load(checkpoint_path).
-        :param dataset: imagenet or cifar10
-        :return: GHN-1 with trained weights
-        """
+    Loads GHN-1 trained on ImageNet or CIFAR-10.
+    To load a GHN from an arbitrary checkpoint, use GHN.load(checkpoint_path).
+    :param dataset: imagenet or cifar10
+    :return: GHN-1 with trained weights
+    """
     path = os.path.dirname(os.path.abspath(__file__))
-    return GHN.load(os.path.join(path, '../../checkpoints/ghn1_%s.pt' % dataset))
+    return GHN.load(os.path.join(path, "../../checkpoints/ghn1_%s.pt" % dataset))
 
 
-def GHN2(dataset='imagenet'):
+def GHN2(dataset="imagenet"):
     """
     Loads GHN-2 trained on ImageNet or CIFAR-10.
     To load a GHN from an arbitrary checkpoint, use GHN.load(checkpoint_path).
@@ -45,7 +47,7 @@ def GHN2(dataset='imagenet'):
     :return: GHN-2 with trained weights
     """
     path = os.path.dirname(os.path.abspath(__file__))
-    return GHN.load(os.path.join(path, '../../checkpoints/ghn2_%s.pt' % dataset))
+    return GHN.load(os.path.join(path, "../../checkpoints/ghn2_%s.pt" % dataset))
 
 
 def ghn_parallel(ghn):
@@ -74,20 +76,23 @@ def ghn_parallel(ghn):
 
 class GHN(nn.Module):
     r"""
-    Graph HyperNetwork based on "Chris Zhang, Mengye Ren, Raquel Urtasun. Graph HyperNetworks for Neural Architecture Search. ICLR 2019."
-    (https://arxiv.org/abs/1810.05749)
+    Graph HyperNetwork based on "Chris Zhang, Mengye Ren, Raquel Urtasun. Graph HyperNetworks for Neural Architecture
+    Search. ICLR 2019." (https://arxiv.org/abs/1810.05749)
 
     """
-    def __init__(self,
-                 max_shape,
-                 num_classes,
-                 hypernet='gatedgnn',
-                 decoder='conv',
-                 weight_norm=False,
-                 ve=False,
-                 layernorm=False,
-                 hid=32,
-                 debug_level=0):
+
+    def __init__(
+        self,
+        max_shape,
+        num_classes,
+        hypernet="gatedgnn",
+        decoder="conv",
+        weight_norm=False,
+        ve=False,
+        layernorm=False,
+        hid=32,
+        debug_level=0,
+    ):
         super(GHN, self).__init__()
 
         assert len(max_shape) == 4, max_shape
@@ -102,65 +107,55 @@ class GHN(nn.Module):
             self.ln = nn.LayerNorm(hid)
 
         self.embed = torch.nn.Embedding(len(PRIMITIVES_DEEPNETS1M), hid)
-        self.shape_enc = ShapeEncoder(hid=hid,
-                                      num_classes=num_classes,
-                                      max_shape=max_shape,
-                                      debug_level=debug_level)
-        if hypernet == 'gatedgnn':
+        self.shape_enc = ShapeEncoder(hid=hid, num_classes=num_classes, max_shape=max_shape, debug_level=debug_level)
+        if hypernet == "gatedgnn":
             self.gnn = GatedGNN(in_features=hid, ve=ve)
-        elif hypernet == 'mlp':
+        elif hypernet == "mlp":
             self.gnn = MLP(in_features=hid, hid=(hid, hid))
         else:
             raise NotImplementedError(hypernet)
 
-        if decoder == 'conv':
+        if decoder == "conv":
             fn_dec, layers = ConvDecoder, (hid * 4, hid * 8)
-        elif decoder == 'mlp':
-            fn_dec, layers = MLPDecoder, (hid * 2, )
+        elif decoder == "mlp":
+            fn_dec, layers = MLPDecoder, (hid * 2,)
         else:
             raise NotImplementedError(decoder)
-        self.decoder = fn_dec(in_features=hid,
-                              hid=layers,
-                              out_shape=max_shape,
-                              num_classes=num_classes)
+        self.decoder = fn_dec(in_features=hid, hid=layers, out_shape=max_shape, num_classes=num_classes)
 
         max_ch = max(max_shape[:2])
-        self.decoder_1d = MLP(hid, hid=(hid * 2, 2 * max_ch),
-                              last_activation=None)
-        self.bias_class = nn.Sequential(nn.ReLU(),
-                                        nn.Linear(max_ch, num_classes))
-
+        self.decoder_1d = MLP(hid, hid=(hid * 2, 2 * max_ch), last_activation=None)
+        self.bias_class = nn.Sequential(nn.ReLU(), nn.Linear(max_ch, num_classes))
 
     @staticmethod
     def load(checkpoint_path, debug_level=1, device=default_device(), verbose=False):
         state_dict = torch.load(checkpoint_path, map_location=device)
-        ghn = GHN(**state_dict['config'], debug_level=debug_level).to(device).eval()
-        ghn.load_state_dict(state_dict['state_dict'])
+        ghn = GHN(**state_dict["config"], debug_level=debug_level).to(device).eval()
+        ghn.load_state_dict(state_dict["state_dict"])
         if verbose:
-            print('GHN with {} parameters loaded from epoch {}.'.format(capacity(ghn)[1], state_dict['epoch']))
+            print("GHN with {} parameters loaded from epoch {}.".format(capacity(ghn)[1], state_dict["epoch"]))
         return ghn
-
 
     def forward(self, nets_torch, graphs=None, return_embeddings=False, predict_class_layers=True, bn_train=True):
         r"""
         Predict parameters for a list of >=1 networks.
         :param nets_torch: one network or a list of networks, each is based on nn.Module.
                            In case of evaluation, only one network can be passed.
-        :param graphs: GraphBatch object in case of training.
-                       For evaluation, graphs can be None and will be constructed on the fly given the nets_torch in this case.
+        :param graphs: GraphBatch object in case of training. For evaluation, graphs can be None and will be constructed
+                       on the fly given the nets_torch in this case.
         :param return_embeddings: True to return the node embeddings obtained after the last graph propagation step.
                                   return_embeddings=True is used for property prediction experiments.
         :param predict_class_layers: default=True predicts all parameters including the classification layers.
                                      predict_class_layers=False is used in fine-tuning experiments.
-        :param bn_train: default=True sets BN layers in nets_torch into the training mode (required to evaluate predicted parameters)
-                        bn_train=False is used in fine-tuning experiments
+        :param bn_train: default=True sets BN layers in nets_torch into the training mode (required to evaluate
+                         predicted parameters) bn_train=False is used in fine-tuning experiments
         :return: nets_torch with predicted parameters and node embeddings if return_embeddings=True
         """
 
         if not self.training:
-            assert isinstance(nets_torch,
-                              nn.Module) or len(nets_torch) == 1, \
-                'constructing the graph on the fly is only supported for a single network'
+            assert (
+                isinstance(nets_torch, nn.Module) or len(nets_torch) == 1
+            ), "constructing the graph on the fly is only supported for a single network"
 
             if isinstance(nets_torch, list):
                 nets_torch = nets_torch[0]
@@ -175,17 +170,24 @@ class GHN(nn.Module):
             if self.debug_level > 1:
                 valid_ops = graphs[0].num_valid_nodes(nets_torch)
         else:
-            assert graphs is not None, \
-                'constructing the graph on the fly is only supported in the evaluation mode'
+            assert graphs is not None, "constructing the graph on the fly is only supported in the evaluation mode"
 
         # Find mapping between embeddings and network parameters
         param_groups, params_map = self._map_net_params(graphs, nets_torch, self.debug_level > 0)
 
         if self.debug_level or not self.training:
-            n_params_true = sum([capacity(net, is_grad=False)[1] for net in (nets_torch if isinstance(nets_torch, list) else [nets_torch])])
+            n_params_true = sum(
+                [
+                    capacity(net, is_grad=False)[1]
+                    for net in (nets_torch if isinstance(nets_torch, list) else [nets_torch])
+                ]
+            )
             if self.debug_level > 1:
-                print('\nnumber of learnable parameter tensors: {}, total number of parameters: {}'.format(
-                    valid_ops, n_params_true))
+                print(
+                    "\nnumber of learnable parameter tensors: {}, total number of parameters: {}".format(
+                        valid_ops, n_params_true
+                    )
+                )
 
         # Obtain initial embeddings for all nodes
         x = self.shape_enc(self.embed(graphs.node_feat[:, 0]), params_map, predict_class_layers=predict_class_layers)
@@ -233,23 +235,20 @@ class GHN(nn.Module):
                 if w_ind is None:
                     continue  # e.g. pooling
 
-                m, sz, is_w = matched['module'], matched['sz'], matched['is_w']
+                m, sz, is_w = matched["module"], matched["sz"], matched["is_w"]
                 for it in range(2 if (len(sz) == 1 and is_w) else 1):
-
                     if len(sz) == 1:
                         # separately set for BN/LN biases as they are
                         # not represented as separate nodes in graphs
                         w_ = w[w_ind][1 - is_w + it]
                         if it == 1:
-                            assert (type(m) in NormLayers and len(key) == 2 and key[1] == 0), \
-                                (type(m), key)
+                            assert type(m) in NormLayers and len(key) == 2 and key[1] == 0, (type(m), key)
                     else:
                         w_ = w[w_ind]
 
                     sz_set = self._set_params(m, self._tile_params(w_, sz), is_w=is_w & ~it)
                     n_tensors += 1
                     n_params += torch.prod(torch.tensor(sz_set))
-
 
         if not self.training and bn_train:
 
@@ -258,46 +257,58 @@ class GHN(nn.Module):
                     module.track_running_stats = False
                     module.training = True
 
-            nets_torch.apply(bn_set_train)  # set BN layers to the training mode to enable evaluation without having running statistics
+            nets_torch.apply(
+                bn_set_train
+            )  # set BN layers to the training mode to enable evaluation without having running statistics
 
         if self.debug_level and not self.training:
-
             end_time = time.time() - start_time
 
-            print('number of parameter tensors predicted using GHN: {}, '
-                  'total parameters predicted: {} ({}), time to predict (on {}): {:.4f} sec'.format(
-                n_tensors,
-                n_params,
-                ('matched!' if n_params_true == n_params else 'error! not matched with {} actual params'.format(n_params_true)).upper(),
-                str(x.device).upper(),
-                end_time))
+            print(
+                "number of parameter tensors predicted using GHN: {}, "
+                "total parameters predicted: {} ({}), time to predict (on {}): {:.4f} sec".format(
+                    n_tensors,
+                    n_params,
+                    (
+                        "matched!"
+                        if n_params_true == n_params
+                        else "error! not matched with {} actual params".format(n_params_true)
+                    ).upper(),
+                    str(x.device).upper(),
+                    end_time,
+                )
+            )
 
             if self.debug_level > 1:
                 if valid_ops != n_tensors:
                     print(
-                    'WARNING: number of learnable tensors ({}) must be the same as the number of predicted tensors ({})'.format(
-                        valid_ops, n_tensors))
-
+                        f"WARNING: number of learnable tensors ({valid_ops}) must be the same as the number of "
+                        f"predicted tensors ({n_tensors})"
+                    )
 
             if self.debug_level > 2:
-                print('predicted parameter stats:')
+                print("predicted parameter stats:")
                 for n, p in nets_torch.named_parameters():
-                    print('{:30s} ({:30s}): min={:.3f} \t max={:.3f} \t mean={:.3f} \t std={:.3f} \t norm={:.3f}'.format(
-                        n[:30],
-                        str(p.shape)[:30],
-                        p.min().item(),
-                        p.max().item(),
-                        p.mean().item(),
-                        p.std().item(),
-                        torch.norm(p).item()))
+                    print(
+                        "{:30s} ({:30s}): min={:.3f} \t max={:.3f} \t mean={:.3f} \t std={:.3f} \t norm={:.3f}".format(
+                            n[:30],
+                            str(p.shape)[:30],
+                            p.min().item(),
+                            p.max().item(),
+                            p.mean().item(),
+                            p.std().item(),
+                            torch.norm(p).item(),
+                        )
+                    )
         elif self.debug_level or not self.training:
             if n_params != n_params_true:
                 print(
-                    'WARNING: number of predicted ({}) or actual ({}) parameters must match'.format(
-                        n_params, n_params_true))
+                    "WARNING: number of predicted ({}) or actual ({}) parameters must match".format(
+                        n_params, n_params_true
+                    )
+                )
 
         return (nets_torch, x) if return_embeddings else nets_torch
-
 
     def _map_net_params(self, graphs, nets_torch, sanity_check=False):
         r"""
@@ -314,39 +325,37 @@ class GHN(nn.Module):
         nets_torch = [nets_torch] if type(nets_torch) not in [tuple, list] else nets_torch
 
         for b, (node_info, net) in enumerate(zip(graphs.node_info, nets_torch)):
-
-            target_modules = net.__dict__['_layered_modules'] if self.training else named_layered_modules(net)
+            target_modules = net.__dict__["_layered_modules"] if self.training else named_layered_modules(net)
 
             # print(target_modules)
             param_ind = torch.sum(graphs.n_nodes[:b]).item()
 
             for cell_id in range(len(node_info)):
-                for (node_ind, p_, name, sz, last_weight, last_bias) in node_info[cell_id]:
-
-                    param_name = p_ if p_.endswith(('.weight', '.bias', 'in_proj_weight', 'in_proj_bias')) else p_ + '.weight'
+                for node_ind, p_, name, sz, last_weight, last_bias in node_info[cell_id]:
+                    param_name = (
+                        p_ if p_.endswith((".weight", ".bias", "in_proj_weight", "in_proj_bias")) else p_ + ".weight"
+                    )
                     try:
                         matched = [target_modules[cell_id][param_name]]
-                    except:
+                    except:  # noqa: E722
                         matched = []
 
                     if len(matched) == 0:
                         if sz is not None:
-                            params_map[param_ind + node_ind] = ({'sz': sz}, None, None)
+                            params_map[param_ind + node_ind] = ({"sz": sz}, None, None)
 
                         if sanity_check:
-                            for pattern in ['input', 'sum', 'concat', 'pool', 'glob_avg', 'msa', 'cse']:
+                            for pattern in ["input", "sum", "concat", "pool", "glob_avg", "msa", "cse"]:
                                 good = name.find(pattern) >= 0
                                 if good:
                                     break
-                            assert good, \
-                                (cell_id, param_name, name,
-                                 node_info[cell_id],
-                                 target_modules[cell_id])
+                            assert good, (cell_id, param_name, name, node_info[cell_id], target_modules[cell_id])
                     else:
-                        sz = matched[0]['sz']
+                        sz = matched[0]["sz"]
 
                         def min_sz(j):
-                            # to group predicted shapes and improve parallelization and at the same time not to predict much more than needed
+                            # to group predicted shapes and improve parallelization and at the same time not to predict
+                            # much more than needed
                             n = min(sz[j], self.max_shape[j])
                             if n % 3 == 0:
                                 n = n // 3 * 4  # make multiple of 4 to be consistent with the decoder
@@ -373,17 +382,17 @@ class GHN(nn.Module):
 
                 # Prune redundant ops in Network by setting their params to None
                 for m in target_modules[cell_id].values():
-                    if m['is_w']:
-                        m['module'].weight = None
-                        if hasattr(m['module'], 'bias') and m['module'].bias is not None:
-                            m['module'].bias = None
+                    if m["is_w"]:
+                        m["module"].weight = None
+                        if hasattr(m["module"], "bias") and m["module"].bias is not None:
+                            m["module"].bias = None
 
         return mapping, params_map
 
-
     def _tile_params(self, w, target_shape):
         r"""
-        Makes the shape of predicted parameter tensors the same as the target shape by tiling/slicing across channels dimensions.
+        Makes the shape of predicted parameter tensors the same as the target shape by tiling/slicing across channels
+        dimensions.
         :param w: predicted tensor, for example of shape (64, 64, 11, 11)
         :param target_shape: tuple, for example (512, 256, 3, 3)
         :return: tensor of shape target_shape
@@ -393,17 +402,17 @@ class GHN(nn.Module):
         # Slice first to avoid tiling a larger tensor
         if len(t) == 1:
             if len(s) == 2:
-                w = w[:min(t[0], s[0]), 0]
+                w = w[: min(t[0], s[0]), 0]
             elif len(s) > 2:
-                w = w[:min(t[0], s[0]), 0, 0, 0]
+                w = w[: min(t[0], s[0]), 0, 0, 0]
         elif len(t) == 2:
             if len(s) > 2:
-                w = w[:min(t[0], s[0]), :min(t[1], s[1]), 0, 0]
+                w = w[: min(t[0], s[0]), : min(t[1], s[1]), 0, 0]
         elif len(t) == 3:
             if len(s) > 3:
-                w = w[:min(t[0], s[0]), :min(t[1], s[1]), :min(t[2], s[2]), 0]
+                w = w[: min(t[0], s[0]), : min(t[1], s[1]), : min(t[2], s[2]), 0]
         else:
-            w = w[:min(t[0], s[0]), :min(t[1], s[1]), :min(t[2], s[2]), :min(t[3], s[3])]
+            w = w[: min(t[0], s[0]), : min(t[1], s[1]), : min(t[2], s[2]), : min(t[3], s[3])]
 
         s = w.shape
         assert len(s) == len(t), (s, t)
@@ -412,37 +421,36 @@ class GHN(nn.Module):
         if t[0] > s[0]:
             n_out = int(np.ceil(t[0] / s[0]))
             if len(t) == 1:
-                w = w.repeat(n_out)[:t[0]]
+                w = w.repeat(n_out)[: t[0]]
             elif len(t) == 2:
-                w = w.repeat((n_out, 1))[:t[0]]
+                w = w.repeat((n_out, 1))[: t[0]]
             elif len(t) == 3:
-                w = w.repeat((n_out, 1, 1))[:t[0]]
+                w = w.repeat((n_out, 1, 1))[: t[0]]
             else:
-                w = w.repeat((n_out, 1, 1, 1))[:t[0]]
+                w = w.repeat((n_out, 1, 1, 1))[: t[0]]
 
         # Tile in_channels
         if len(t) > 1:
             if t[1] > s[1]:
                 n_in = int(np.ceil(t[1] / s[1]))
                 if len(t) == 2:
-                    w = w.repeat((1, n_in))[:, :t[1]]
+                    w = w.repeat((1, n_in))[:, : t[1]]
                 elif len(t) == 3:
                     w = w.repeat((1, n_in, 1))[:, t[1]]
                 else:
-                    w = w.repeat((1, n_in, 1, 1))[:, :t[1]]
+                    w = w.repeat((1, n_in, 1, 1))[:, : t[1]]
 
         # Chop out any extra bits tiled
         if len(t) == 1:
-            w = w[:t[0]]
+            w = w[: t[0]]
         elif len(t) == 2:
-            w = w[:t[0], :t[1]]
+            w = w[: t[0], : t[1]]
         elif len(t) == 3:
-            w = w[:t[0], :t[1], :t[2]]
+            w = w[: t[0], : t[1], : t[2]]
         else:
-            w = w[:t[0], :t[1], :t[2], :t[3]]
+            w = w[: t[0], : t[1], : t[2], : t[3]]
 
         return w
-
 
     def _set_params(self, module, tensor, is_w):
         r"""
@@ -454,8 +462,8 @@ class GHN(nn.Module):
         """
         if self.weight_norm:
             tensor = self._normalize(module, tensor, is_w)
-        is_layer_scale = hasattr(module, 'layer_scale') and module.layer_scale is not None
-        key = ('layer_scale' if is_layer_scale else 'weight' ) if is_w else 'bias'
+        is_layer_scale = hasattr(module, "layer_scale") and module.layer_scale is not None
+        key = ("layer_scale" if is_layer_scale else "weight") if is_w else "bias"
         target_param = getattr(module, key)
         sz_target = tuple(target_param) if isinstance(target_param, (list, tuple)) else target_param.shape
         if self.training:
@@ -472,7 +480,6 @@ class GHN(nn.Module):
         assert sz_target == set_param.shape, (sz_target, set_param.shape)
         return set_param.shape
 
-
     def _normalize(self, module, p, is_w):
         r"""
         Normalizes the predicted parameter tensor according to the Fan-In scheme described in the paper.
@@ -482,20 +489,19 @@ class GHN(nn.Module):
         :return: normalized predicted tensor
         """
         if p.dim() > 1:
-
             sz = p.shape
 
             if len(sz) > 2 and sz[2] >= 11 and sz[0] == 1:
                 assert isinstance(module, PosEnc), (sz, module)
-                return p    # do not normalize positional encoding weights
+                return p  # do not normalize positional encoding weights
 
             no_relu = len(sz) > 2 and (sz[1] == 1 or sz[2] < sz[3])
             if no_relu:
                 # layers not followed by relu
-                beta = 1.
+                beta = 1.0
             else:
                 # for layers followed by rely increase the weight scale
-                beta = 2.
+                beta = 2.0
 
             # fan-out:
             # p = p * (beta / (sz[0] * p[0, 0].numel())) ** 0.5
@@ -504,10 +510,9 @@ class GHN(nn.Module):
             p = p * (beta / p[0].numel()) ** 0.5
 
         else:
-
             if is_w:
                 p = 2 * torch.sigmoid(0.5 * p)  # BN/LN norm weight is [0,2]
             else:
-                p = torch.tanh(0.2 * p)         # bias is [-1,1]
+                p = torch.tanh(0.2 * p)  # bias is [-1,1]
 
         return p

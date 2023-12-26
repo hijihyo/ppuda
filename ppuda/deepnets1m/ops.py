@@ -1,3 +1,4 @@
+# flake8: noqa: F403, F405
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
@@ -7,25 +8,27 @@
 """
 Some functionality in this script is based on:
 - https://github.com/quark0/darts (Apache License 2.0)
-- https://github.com/ai-med/squeeze_and_excitation/blob/master/squeeze_and_excitation/squeeze_and_excitation.py (MIT License)
+- https://github.com/ai-med/squeeze_and_excitation/blob/master/squeeze_and_excitation/squeeze_and_excitation.py
+    (MIT License)
 - https://github.com/lucidrains/vit-pytorch/blob/main/vit_pytorch/vit.py (MIT License)
 
 """
 
 
 import torch
-import torchvision
 import torch.nn as nn
+import torchvision
 from einops import rearrange
+
 from .light_ops import *
 
 
 def parse_op_ks(op):
     ks = 0
-    op_name = ''
+    op_name = ""
     is_double = False
-    for s in op.split('_'):
-        ks_str = s.split('x')
+    for s in op.split("_"):
+        ks_str = s.split("x")
         valid_ks_str = False
         if len(ks_str) == 2:
             if ks > 0:
@@ -34,28 +37,26 @@ def parse_op_ks(op):
                 try:
                     ks = max(ks, int(ks_str[i]))
                     valid_ks_str = True
-                except:
+                except:  # noqa: E722
                     continue
 
         if not valid_ks_str:
             if len(op_name) > 0:
-                op_name += '_'
+                op_name += "_"
             op_name += s
     if is_double:
-        op_name += '2'
+        op_name += "2"
     return op_name, ks
 
 
 def bn_layer(norm, C, light):
-    if norm in [None, '', 'none']:
+    if norm in [None, "", "none"]:
         norm_layer = nn.Identity()
-    elif norm.startswith('bn'):
+    elif norm.startswith("bn"):
         if light:
-            norm_layer = BatchNorm2dLight(C,
-                                           track_running_stats=norm.find('track') >= 0)
+            norm_layer = BatchNorm2dLight(C, track_running_stats=norm.find("track") >= 0)
         else:
-            norm_layer = nn.BatchNorm2d(C,
-                                        track_running_stats=norm.find('track') >= 0)
+            norm_layer = nn.BatchNorm2d(C, track_running_stats=norm.find("track") >= 0)
     else:
         raise NotImplementedError(norm)
     return norm_layer
@@ -75,30 +76,42 @@ def lin_layer(light):
 
 NormLayers = [nn.BatchNorm2d, nn.LayerNorm, BatchNorm2dLight, LayerNormLight]
 try:
-    import torchvision
     NormLayers.append(torchvision.models.convnext.LayerNorm2d)
 except Exception as e:
-    print(e, 'convnext requires torchvision >= 0.12, current version is ', torchvision.__version__)
+    print(e, "convnext requires torchvision >= 0.12, current version is ", torchvision.__version__)
 
 
 OPS = {
-    'none' : lambda C_in, C_out, ks, stride, norm, light: Zero(stride),
-    'skip_connect' : lambda C_in, C_out, ks, stride, norm, light: nn.Identity() if stride == 1 else FactorizedReduce(C_in, C_out, norm=norm, light=light),
-    'avg_pool' : lambda C_in, C_out, ks, stride, norm, light: nn.AvgPool2d(ks, stride=stride, padding=ks // 2, count_include_pad=False),
-    'max_pool' : lambda C_in, C_out, ks, stride, norm, light: nn.MaxPool2d(ks, stride=stride, padding=ks // 2),
-    'conv' : lambda C_in, C_out, ks, stride, norm, light: ReLUConvBN(C_in, C_out, ks, stride, ks // 2, norm, light=light),
-    'sep_conv' : lambda C_in, C_out, ks, stride, norm, light: SepConv(C_in, C_out, ks, stride, ks // 2, norm=norm, light=light),
-    'dil_conv' : lambda C_in, C_out, ks, stride, norm, light: DilConv(C_in, C_out, ks, stride, ks - ks % 2, 2, norm=norm, light=light),
-    'conv2' : lambda C_in, C_out, ks, stride, norm, light: ReLUConvBN(C_in, C_out, ks, stride, ks // 2, norm, double=True, light=light),
-    'conv_stride' : lambda C_in, C_out, ks, stride, norm, light: conv_layer(light)(C_in, C_out, ks, stride=ks, bias=False, padding=int(ks < 4)),
-    'msa':  lambda C_in, C_out, ks, stride, norm, light: Transformer(C_in, dim_out=C_out, stride=stride, light=light),
-    'cse':  lambda C_in, C_out, ks, stride, norm, light: ChannelSELayer(C_in, dim_out=C_out, stride=stride, light=light),
+    "none": lambda C_in, C_out, ks, stride, norm, light: Zero(stride),
+    "skip_connect": lambda C_in, C_out, ks, stride, norm, light: nn.Identity()
+    if stride == 1
+    else FactorizedReduce(C_in, C_out, norm=norm, light=light),
+    "avg_pool": lambda C_in, C_out, ks, stride, norm, light: nn.AvgPool2d(
+        ks, stride=stride, padding=ks // 2, count_include_pad=False
+    ),
+    "max_pool": lambda C_in, C_out, ks, stride, norm, light: nn.MaxPool2d(ks, stride=stride, padding=ks // 2),
+    "conv": lambda C_in, C_out, ks, stride, norm, light: ReLUConvBN(C_in, C_out, ks, stride, ks // 2, norm, light=light),
+    "sep_conv": lambda C_in, C_out, ks, stride, norm, light: SepConv(
+        C_in, C_out, ks, stride, ks // 2, norm=norm, light=light
+    ),
+    "dil_conv": lambda C_in, C_out, ks, stride, norm, light: DilConv(
+        C_in, C_out, ks, stride, ks - ks % 2, 2, norm=norm, light=light
+    ),
+    "conv2": lambda C_in, C_out, ks, stride, norm, light: ReLUConvBN(
+        C_in, C_out, ks, stride, ks // 2, norm, double=True, light=light
+    ),
+    "conv_stride": lambda C_in, C_out, ks, stride, norm, light: conv_layer(light)(
+        C_in, C_out, ks, stride=ks, bias=False, padding=int(ks < 4)
+    ),
+    "msa": lambda C_in, C_out, ks, stride, norm, light: Transformer(C_in, dim_out=C_out, stride=stride, light=light),
+    "cse": lambda C_in, C_out, ks, stride, norm, light: ChannelSELayer(C_in, dim_out=C_out, stride=stride, light=light),
 }
 
 
 class ChannelSELayer(nn.Module):
     """
-    Copied from https://github.com/ai-med/squeeze_and_excitation/blob/master/squeeze_and_excitation/squeeze_and_excitation.py
+    Copied from
+    https://github.com/ai-med/squeeze_and_excitation/blob/master/squeeze_and_excitation/squeeze_and_excitation.py
 
     Re-implementation of Squeeze-and-Excitation (SE) block described in:
         *Hu et al., Squeeze-and-Excitation Networks, arXiv:1709.01507*
@@ -134,7 +147,7 @@ class ChannelSELayer(nn.Module):
         """
         super(ChannelSELayer, self).__init__()
         if dim_out is not None:
-            assert dim_out == num_channels, (dim_out, num_channels, 'only same dimensionality is supported')
+            assert dim_out == num_channels, (dim_out, num_channels, "only same dimensionality is supported")
         num_channels_reduced = num_channels // reduction_ratio
         self.reduction_ratio = reduction_ratio
         self.stride = stride
@@ -159,20 +172,21 @@ class ChannelSELayer(nn.Module):
         a, b = squeeze_tensor.size()
         output_tensor = torch.mul(input_tensor, fc_out_2.view(a, b, 1, 1))
         if self.stride > 1:
-            output_tensor = output_tensor[:, :, ::self.stride, ::self.stride]
+            output_tensor = output_tensor[:, :, :: self.stride, :: self.stride]
         return output_tensor
 
 
 class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout = 0., light=False):
+    def __init__(self, dim, hidden_dim, dropout=0.0, light=False):
         super().__init__()
         self.net = nn.Sequential(
             lin_layer(light)(dim, hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
             lin_layer(light)(hidden_dim, dim),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
+
     def forward(self, x):
         return self.net(x)
 
@@ -184,7 +198,7 @@ class PosEnc(nn.Module):
         self.weight = nn.Parameter(fn(1, C, ks, ks))
 
     def forward(self, x):
-        return  x + self.weight
+        return x + self.weight
 
 
 class Transformer(nn.Module):
@@ -214,20 +228,18 @@ class Transformer(nn.Module):
     SOFTWARE.
 
     """
-    def __init__(self, dim, dim_out=None, heads=8, dim_head=None, dropout=0., stride=1, light=False):
+
+    def __init__(self, dim, dim_out=None, heads=8, dim_head=None, dropout=0.0, stride=1, light=False):
         super().__init__()
         self.stride = stride
         if dim_head is None:
             dim_head = dim // heads
         inner_dim = dim_head * heads
         self.heads = heads
-        self.scale = dim_head ** -0.5
+        self.scale = dim_head**-0.5
 
         self.to_qkv = lin_layer(light)(dim, inner_dim * 3, bias=False)
-        self.to_out = nn.Sequential(
-            lin_layer(light)(inner_dim, dim_out),
-            nn.Dropout(dropout)
-        )
+        self.to_out = nn.Sequential(lin_layer(light)(inner_dim, dim_out), nn.Dropout(dropout))
 
         self.ln1 = ln_layer(dim, light)
         self.ln2 = ln_layer(dim, light)
@@ -243,18 +255,18 @@ class Transformer(nn.Module):
         x_in = x
         x = self.ln1(x)
 
-        b, n, _, h = *x.shape, self.heads
+        _, _, _, h = *x.shape, self.heads
         qkv = self.to_qkv(x).chunk(3, dim=-1)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), qkv)
-        dots = torch.einsum('bhid,bhjd->bhij', q, k) * self.scale
+        q, k, v = map(lambda t: rearrange(t, "b n (h d) -> b h n d", h=h), qkv)
+        dots = torch.einsum("bhid,bhjd->bhij", q, k) * self.scale
         if mask is not None:
-            raise NotImplementedError('should not be used for images')
+            raise NotImplementedError("should not be used for images")
 
         attn = dots.softmax(dim=-1)
 
-        out = torch.einsum('bhij,bhjd->bhid', attn, v)
-        out = rearrange(out, 'b h n d -> b n (h d)')
+        out = torch.einsum("bhij,bhjd->bhid", attn, v)
+        out = rearrange(out, "b h n d -> b n (h d)")
         out = self.to_out(out)
         # end of MSA
         out = out + x_in  # residual
@@ -264,7 +276,7 @@ class Transformer(nn.Module):
         if len(sz) == 4:
             out = out.permute(0, 2, 1).view(sz)  # B,C,H,W
             if self.stride > 1:
-                out = out[:, :, ::self.stride, ::self.stride]
+                out = out[:, :, :: self.stride, :: self.stride]
 
         return out
 
@@ -479,47 +491,42 @@ class Transformer(nn.Module):
 
 
 class ReLUConvBN(nn.Module):
-
-    def __init__(self, C_in, C_out, ks=1, stride=1, padding=0, norm='bn', double=False, light=False):
+    def __init__(self, C_in, C_out, ks=1, stride=1, padding=0, norm="bn", double=False, light=False):
         super(ReLUConvBN, self).__init__()
         self.stride = stride
         if double:
             conv = [
-                conv_layer(light)(C_in, C_in, (1, ks), stride=(1, stride),
-                          padding=(0, padding), bias=False),
-                conv_layer(light)(C_in, C_out, (ks, 1), stride=(stride, 1),
-                          padding=(padding, 0), bias=False)]
+                conv_layer(light)(C_in, C_in, (1, ks), stride=(1, stride), padding=(0, padding), bias=False),
+                conv_layer(light)(C_in, C_out, (ks, 1), stride=(stride, 1), padding=(padding, 0), bias=False),
+            ]
         else:
             conv = [conv_layer(light)(C_in, C_out, ks, stride=stride, padding=padding, bias=False)]
-        self.op = nn.Sequential(
-            nn.ReLU(inplace=False),
-            *conv,
-            bn_layer(norm, C_out, light))
+        self.op = nn.Sequential(nn.ReLU(inplace=False), *conv, bn_layer(norm, C_out, light))
 
     def forward(self, x):
         return self.op(x)
 
 
 class DilConv(nn.Module):
-    
-    def __init__(self, C_in, C_out, ks, stride, padding, dilation, norm='bn', light=False):
+    def __init__(self, C_in, C_out, ks, stride, padding, dilation, norm="bn", light=False):
         super(DilConv, self).__init__()
         self.stride = stride
 
         self.op = nn.Sequential(
             nn.ReLU(inplace=False),
-            conv_layer(light)(C_in, C_in, kernel_size=ks, stride=stride, padding=padding, dilation=dilation, groups=C_in, bias=False),
+            conv_layer(light)(
+                C_in, C_in, kernel_size=ks, stride=stride, padding=padding, dilation=dilation, groups=C_in, bias=False
+            ),
             conv_layer(light)(C_in, C_out, kernel_size=1, padding=0, bias=False),
-            bn_layer(norm, C_out, light)
-            )
+            bn_layer(norm, C_out, light),
+        )
 
     def forward(self, x):
         return self.op(x)
 
 
 class SepConv(nn.Module):
-    
-    def __init__(self, C_in, C_out, ks, stride, padding, norm='bn', light=False):
+    def __init__(self, C_in, C_out, ks, stride, padding, norm="bn", light=False):
         super(SepConv, self).__init__()
         self.stride = stride
 
@@ -531,8 +538,8 @@ class SepConv(nn.Module):
             nn.ReLU(inplace=False),
             conv_layer(light)(C_in, C_in, kernel_size=ks, stride=1, padding=padding, groups=C_in, bias=False),
             conv_layer(light)(C_in, C_out, kernel_size=1, padding=0, bias=False),
-            bn_layer(norm, C_out, light)
-            )
+            bn_layer(norm, C_out, light),
+        )
 
     def forward(self, x):
         return self.op(x)
@@ -546,7 +553,7 @@ class Stride(nn.Module):
     def forward(self, x):
         if self.stride == 1:
             return x
-        return x[:,:,::self.stride,::self.stride]
+        return x[:, :, :: self.stride, :: self.stride]
 
 
 class Zero(nn.Module):
@@ -556,12 +563,12 @@ class Zero(nn.Module):
 
     def forward(self, x):
         if self.stride == 1:
-            return x.mul(0.)
-        return x[:,:,::self.stride,::self.stride].mul(0.)
+            return x.mul(0.0)
+        return x[:, :, :: self.stride, :: self.stride].mul(0.0)
 
 
 class FactorizedReduce(nn.Module):
-    def __init__(self, C_in, C_out, norm='bn', stride=2, light=False):
+    def __init__(self, C_in, C_out, norm="bn", stride=2, light=False):
         super(FactorizedReduce, self).__init__()
         assert C_out % 2 == 0
         self.stride = stride
@@ -572,6 +579,6 @@ class FactorizedReduce(nn.Module):
 
     def forward(self, x):
         x = self.relu(x)
-        out = torch.cat([self.conv_1(x), self.conv_2(x[:,:,1:,1:] if self.stride > 1 else x)], dim=1)
+        out = torch.cat([self.conv_1(x), self.conv_2(x[:, :, 1:, 1:] if self.stride > 1 else x)], dim=1)
         out = self.bn(out)
         return out

@@ -20,22 +20,23 @@ Example of creating 1000 convolutional layers showing 4x speed up of using Conv2
 """
 
 
+import numbers
+from collections import OrderedDict
+from typing import Dict, Optional, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numbers
-from collections import OrderedDict
-from typing import Union, Optional, Dict
-from torch.nn.modules.conv import _pair
 from torch.nn.common_types import _size_2_t
+from torch.nn.modules.conv import _pair
 
 
 class ModuleLight(nn.Module):
     def __init__(self):
         super(ModuleLight, self).__init__()
 
-    def __setattr__(self, name: str, value: Union[torch.Tensor, 'Module']) -> None:
-        if isinstance(value, (list, torch.Tensor, nn.Parameter)) or (name in ['weight', 'bias'] and value is None):
+    def __setattr__(self, name: str, value: Union[torch.Tensor, "nn.Module"]) -> None:
+        if isinstance(value, (list, torch.Tensor, nn.Parameter)) or (name in ["weight", "bias"] and value is None):
             self._parameters[name] = tuple(value) if isinstance(value, list) else value
         else:
             object.__setattr__(self, name, value)
@@ -48,8 +49,9 @@ class ModuleLight(nn.Module):
 
 
 class Conv2dLight(ModuleLight):
-
-    def __init__(self, in_channels: int,
+    def __init__(
+        self,
+        in_channels: int,
         out_channels: int,
         kernel_size: _size_2_t,
         stride: _size_2_t = 1,
@@ -57,10 +59,10 @@ class Conv2dLight(ModuleLight):
         dilation: _size_2_t = 1,
         groups: int = 1,
         bias: bool = True,
-        padding_mode: str = 'zeros',  # TODO: refine this type
+        padding_mode: str = "zeros",  # TODO: refine this type
         device=None,
-        dtype=torch.bool):
-
+        dtype=torch.bool,
+    ):
         super(Conv2dLight, self).__init__()
 
         self._parameters: Dict[str, Optional[nn.Parameter]] = OrderedDict()
@@ -80,14 +82,11 @@ class Conv2dLight(ModuleLight):
             self.bias = None
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return F.conv2d(input, self.weight, self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
+        return F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
 
 class LinearLight(ModuleLight):
-
-    def __init__(self, in_features: int, out_features: int, bias: bool = True,
-                 device=None, dtype=torch.bool):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=torch.bool):
         super(LinearLight, self).__init__()
         self._parameters: Dict[str, Optional[nn.Parameter]] = OrderedDict()
 
@@ -105,9 +104,9 @@ class LinearLight(ModuleLight):
 
 
 class LayerNormLight(ModuleLight):
-
-    def __init__(self, normalized_shape: int, eps: float = 1e-5, elementwise_affine: bool = True,
-                 device=None, dtype=None) -> None:
+    def __init__(
+        self, normalized_shape: int, eps: float = 1e-5, elementwise_affine: bool = True, device=None, dtype=None
+    ) -> None:
         super(LayerNormLight, self).__init__()
 
         if isinstance(normalized_shape, numbers.Integral):
@@ -121,19 +120,12 @@ class LayerNormLight(ModuleLight):
         self.bias = list(normalized_shape)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return F.layer_norm(
-            input, self.normalized_shape, self.weight, self.bias, self.eps)
+        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps)
 
 
 class BatchNorm2dLight(ModuleLight):
-
-    def __init__(self, num_features,
-        eps=1e-5,
-        momentum=0.1,
-        affine=True,
-        track_running_stats=False,
-        device=None,
-        dtype=None
+    def __init__(
+        self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=False, device=None, dtype=None
     ):
         super(BatchNorm2dLight, self).__init__()
         self.num_features = num_features
@@ -142,7 +134,7 @@ class BatchNorm2dLight(ModuleLight):
         self.affine = affine
         self.track_running_stats = track_running_stats
 
-        assert affine and not track_running_stats, 'assumed affine and that running stats is not updated'
+        assert affine and not track_running_stats, "assumed affine and that running stats is not updated"
         self.running_mean = None
         self.running_var = None
         self.num_batches_tracked = None
@@ -150,9 +142,7 @@ class BatchNorm2dLight(ModuleLight):
         self.weight = [num_features]
         self.bias = [num_features]
 
-
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-
         if self.momentum is None:
             exponential_average_factor = 0.0
         else:
@@ -165,9 +155,7 @@ class BatchNorm2dLight(ModuleLight):
 
         return F.batch_norm(
             input,
-            self.running_mean
-            if not self.training or self.track_running_stats
-            else None,
+            self.running_mean if not self.training or self.track_running_stats else None,
             self.running_var if not self.training or self.track_running_stats else None,
             self.weight,
             self.bias,

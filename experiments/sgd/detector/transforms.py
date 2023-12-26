@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import random
-import torch
 
 from torchvision.transforms import functional as F
 

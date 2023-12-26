@@ -17,7 +17,6 @@ from torch.autograd import Variable
 
 
 class CrossEntropyLabelSmooth(nn.Module):
-
     def __init__(self, num_classes, epsilon):
         super(CrossEntropyLabelSmooth, self).__init__()
         self.num_classes = num_classes
@@ -33,11 +32,13 @@ class CrossEntropyLabelSmooth(nn.Module):
 
 
 class AvgrageMeter:
-
     def __init__(self, dispersion_measure=None):
         self.dispersion_measure = dispersion_measure
-        assert dispersion_measure in [None, 'std', 'se'], (
-            'must be None, standard deviation (std) or standard error (se) of the mean')
+        assert dispersion_measure in [
+            None,
+            "std",
+            "se",
+        ], "must be None, standard deviation (std) or standard error (se) of the mean"
         self.reset()
 
     def reset(self):
@@ -57,7 +58,7 @@ class AvgrageMeter:
             assert abs(self.avg - np.mean(self.values)) < 1e-3, (self.avg, np.mean(self.values))  # sanity check
             assert len(self.values) == self.cnt, (len(self.values), self.cnt)  # sanity check
             sd = np.std(self.values)
-            self.dispersion = sd if self.dispersion_measure == 'std' else sd / np.sqrt(self.cnt)
+            self.dispersion = sd if self.dispersion_measure == "std" else sd / np.sqrt(self.cnt)
 
 
 def accuracy(output, target, topk=(1,)):
@@ -76,25 +77,25 @@ def accuracy(output, target, topk=(1,)):
 
 
 def drop_path(x, drop_prob):
-    if drop_prob > 0.:
-        keep_prob = 1. - drop_prob
+    if drop_prob > 0.0:
+        keep_prob = 1.0 - drop_prob
         mask = Variable(torch.cuda.FloatTensor(x.size(0), 1, 1, 1).bernoulli_(keep_prob))
         x.div_(keep_prob)
         x.mul_(mask)
     return x
 
 
-def load_DARTS_pretrained(net, checkpoint='./checkpoints/imagenet_model.pt', device='cpu', load_class_layers=True):
-    state_dict = torch.load(checkpoint, map_location=device)['state_dict']
+def load_DARTS_pretrained(net, checkpoint="./checkpoints/imagenet_model.pt", device="cpu", load_class_layers=True):
+    state_dict = torch.load(checkpoint, map_location=device)["state_dict"]
     state_dict_new = {}
     for name, p in state_dict.items():
-        if name.startswith('classifier.'):
+        if name.startswith("classifier."):
             if load_class_layers:
-                if name.startswith('classifier.w') or name.startswith('classifier.b'):
-                    state_dict_new[name.replace('classifier.', 'classifier.0.')] = p
+                if name.startswith("classifier.w") or name.startswith("classifier.b"):
+                    state_dict_new[name.replace("classifier.", "classifier.0.")] = p
                 else:
                     state_dict_new[name] = p
-        elif name.startswith('auxiliary'):
+        elif name.startswith("auxiliary"):
             continue
         else:
             state_dict_new[name] = p
